@@ -1,0 +1,10 @@
+[package]
+name = "painter"
+version = "0.1.0"
+authors = ["Rikard Legge <rikard.legge@gmail.com>"]
+
+[dependencies]
+gfx = "0.13"
+glutin ="*"
+gfx_window_glutin = "*"
+cgmath="0.12"
