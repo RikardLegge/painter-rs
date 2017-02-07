@@ -1,0 +1,17 @@
+.class {
+  class: "value"
+}
+
+#id1, #id2 {
+  id: "value";
+  id2: "value"
+}
+
+elem {
+  elem: "value";
+  link: url("a_link");
+}
+
+elem2 {
+  elem: "value";
+}
