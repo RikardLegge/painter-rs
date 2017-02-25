@@ -31,6 +31,7 @@ trait Css {
     fn end(state : &mut CssParser) {}
 }
 
+#[derive(Debug)]
 struct CssRoot {
     rule_sets : Vec<CssRuleSet>,
 }
@@ -53,7 +54,13 @@ impl Css for CssRoot {
     }
 }
 
+#[derive(Debug)]
 struct CssSelector {}
+impl CssSelector {
+    fn new() -> CssSelector {
+        return CssSelector {}
+    }
+}
 impl Css for CssSelector {
     fn test(css : char) -> CssTestResult {
         match css {
@@ -71,14 +78,14 @@ impl Css for CssSelector {
 
     fn end(state : &mut CssParser) {
         let chars = state.flush_char_buffer();
-        state.current_rule_set.selectors.push(chars);
+        state.ruleset.selectors.push(chars);
 
         state.push_context(CssContext::RuleSet);
     }
 
     fn append(state : &mut CssParser) {
         let chars = state.flush_char_buffer();
-        state.current_rule_set.selectors.push(chars);
+        state.ruleset.selectors.push(chars);
     }
 }
 
@@ -105,8 +112,8 @@ impl Css for CssRuleSet {
     }
 
     fn end(state : &mut CssParser) {
-        let current_rule_set = mem::replace(&mut state.current_rule_set, CssRuleSet::new());
-        state.rule_sets.push(current_rule_set);
+        let current_rule_set = mem::replace(&mut state.ruleset, CssRuleSet::new());
+        state.root.rule_sets.push(current_rule_set);
 
     }
 }
@@ -122,7 +129,13 @@ impl CssRule {
     }
 }
 
+#[derive(Debug)]
 struct CssKey {}
+impl CssKey {
+    fn new() -> CssKey {
+        return CssKey {}
+    }
+}
 impl Css for  CssKey {
     fn test(css : char) -> CssTestResult {
         match css {
@@ -137,12 +150,18 @@ impl Css for  CssKey {
     }
 
     fn end(state : &mut CssParser) {
-        state.current_rule.key = state.flush_char_buffer();
+        state.rule.key = state.flush_char_buffer();
         state.push_context(CssContext::Value);
     }
 }
 
+#[derive(Debug)]
 struct CssValue {}
+impl CssValue {
+    fn new() -> CssValue {
+        return CssValue {}
+    }
+}
 impl Css for CssValue {
     fn test(css : char) -> CssTestResult {
         match css {
@@ -160,14 +179,20 @@ impl Css for CssValue {
     }
 
     fn end(state : &mut CssParser) {
-        state.current_rule.value = state.flush_char_buffer();
+        state.rule.value = state.flush_char_buffer();
 
-        let current_rule = mem::replace(&mut state.current_rule, CssRule::new());
-        state.current_rule_set.rules.push(current_rule);
+        let current_rule = mem::replace(&mut state.rule, CssRule::new());
+        state.ruleset.rules.push(current_rule);
     }
 }
 
+#[derive(Debug)]
 struct CssString {}
+impl CssString {
+    fn new() -> CssString {
+        return CssString {}
+    }
+}
 impl Css for CssString {
     fn test(css : char) -> CssTestResult {
         match css {
@@ -188,9 +213,13 @@ struct CssParser {
     char_buffer : Vec<char>,
     current_char: char,
 
-    rule_sets : Vec<CssRuleSet>,
-    current_rule_set : CssRuleSet,
-    current_rule : CssRule
+    root: CssRoot,
+    selector: CssSelector,
+    ruleset: CssRuleSet,
+    rule: CssRule,
+    key: CssKey,
+    value: CssValue,
+    string: CssString,
 }
 impl CssParser {
 
@@ -200,9 +229,13 @@ impl CssParser {
             char_buffer: Vec::new(),
             current_char: '\0',
 
-            rule_sets: Vec::new(),
-            current_rule_set: CssRuleSet::new(),
-            current_rule: CssRule::new()
+            root: CssRoot::new(),
+            selector: CssSelector::new(),
+            ruleset: CssRuleSet::new(),
+            rule: CssRule::new(),
+            key: CssKey::new(),
+            value: CssValue::new(),
+            string: CssString::new(),
         };
         parser.push_context(CssContext::Root);
 
@@ -291,7 +324,7 @@ impl CssParser {
             self.parse_char();
         }
 
-        println!("{:?}", self.rule_sets);
+        println!("{:?}", self.root);
     }
 }
 
