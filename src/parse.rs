@@ -24,7 +24,6 @@ fn main() {
     parser.parse(file_contents);
 }
 
-
 trait Css {
     fn test(char : char) -> CssTestResult;
     fn begin(state : &mut CssParser) {}
@@ -32,71 +31,25 @@ trait Css {
     fn end(state : &mut CssParser) {}
 }
 
-struct CssNull {}
-impl Css for CssNull {
-    fn test(char : char) -> CssTestResult {
-        return CssTestResult {context: CssContext::None, command: CssCommand::None}
-    }
+struct CssRoot {
+    rule_sets : Vec<CssRuleSet>,
 }
-
-struct CssString {}
-impl Css for CssString {
-    fn test(css : char) -> CssTestResult {
-        match css {
-            '"' |
-            '\'' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
-            _ =>    CssTestResult {context: CssContext::String, command: CssCommand::None},
+impl CssRoot {
+    fn new() -> CssRoot {
+        return CssRoot {
+            rule_sets: Vec::new()
         }
     }
-
-    fn end(state : &mut CssParser) {
-        let char = state.current_char;
-        state.push_char(char);
-    }
 }
-
-struct CssValue {}
-impl Css for CssValue {
+impl Css for CssRoot {
     fn test(css : char) -> CssTestResult {
         match css {
-            '"' => CssTestResult {context: CssContext::String, command: CssCommand::Begin},
-            '\''=> CssTestResult {context: CssContext::String, command: CssCommand::Begin},
-            ';' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
-            '}' => CssTestResult {context: CssContext::None,   command: CssCommand::EndKeepChar},
-            _ => CssTestResult   {context: CssContext::Value,  command: CssCommand::None},
+            _ => CssTestResult {context: CssContext::Selector, command: CssCommand::Begin},
         }
     }
 
     fn begin(state : &mut CssParser) {
-        let char = state.current_char;
-        state.push_char(char);
-    }
-
-    fn end(state : &mut CssParser) {
-        state.current_rule.value = state.flush_char_buffer();
-
-        let current_rule = mem::replace(&mut state.current_rule, CssRule::new());
-        state.current_rule_set.rules.push(current_rule);
-    }
-}
-
-struct CssKey {}
-impl Css for  CssKey {
-    fn test(css : char) -> CssTestResult {
-        match css {
-            ':' => CssTestResult {context: CssContext::None, command: CssCommand::End},
-            _ => CssTestResult   {context: CssContext::Key,  command: CssCommand::None},
-        }
-    }
-
-    fn begin(state : &mut CssParser) {
-        let char = state.current_char;
-        state.push_char(char);
-    }
-
-    fn end(state : &mut CssParser) {
-        state.current_rule.key = state.flush_char_buffer();
-        state.push_context(CssContext::Value);
+        //        return CssRoot::new();
     }
 }
 
@@ -129,6 +82,16 @@ impl Css for CssSelector {
     }
 }
 
+#[derive(Debug)]
+struct CssRuleSet {
+    selectors : Vec<String>,
+    rules : Vec<CssRule>
+}
+impl CssRuleSet {
+    fn new() -> CssRuleSet {
+        return CssRuleSet {selectors: Vec::new(), rules: Vec::new()}
+    }
+}
 impl Css for CssRuleSet {
     fn test(css : char) -> CssTestResult {
         match css {
@@ -148,25 +111,75 @@ impl Css for CssRuleSet {
     }
 }
 
-struct CssRoot {
-    rule_sets : Vec<CssRuleSet>,
+#[derive(Debug)]
+struct CssRule {
+    key: String,
+    value: String
 }
-impl CssRoot {
-    fn new() -> CssRoot {
-        return CssRoot {
-            rule_sets: Vec::new()
-        }
+impl CssRule {
+    fn new() -> CssRule {
+        return CssRule {key: "".to_string(), value: "".to_string()}
     }
 }
-impl Css for CssRoot {
+
+struct CssKey {}
+impl Css for  CssKey {
     fn test(css : char) -> CssTestResult {
         match css {
-            _ => CssTestResult {context: CssContext::Selector, command: CssCommand::Begin},
+            ':' => CssTestResult {context: CssContext::None, command: CssCommand::End},
+            _ => CssTestResult   {context: CssContext::Key,  command: CssCommand::None},
         }
     }
 
     fn begin(state : &mut CssParser) {
-//        return CssRoot::new();
+        let char = state.current_char;
+        state.push_char(char);
+    }
+
+    fn end(state : &mut CssParser) {
+        state.current_rule.key = state.flush_char_buffer();
+        state.push_context(CssContext::Value);
+    }
+}
+
+struct CssValue {}
+impl Css for CssValue {
+    fn test(css : char) -> CssTestResult {
+        match css {
+            '"' => CssTestResult {context: CssContext::String, command: CssCommand::Begin},
+            '\''=> CssTestResult {context: CssContext::String, command: CssCommand::Begin},
+            ';' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
+            '}' => CssTestResult {context: CssContext::None,   command: CssCommand::EndKeepChar},
+            _ => CssTestResult   {context: CssContext::Value,  command: CssCommand::None},
+        }
+    }
+
+    fn begin(state : &mut CssParser) {
+        let char = state.current_char;
+        state.push_char(char);
+    }
+
+    fn end(state : &mut CssParser) {
+        state.current_rule.value = state.flush_char_buffer();
+
+        let current_rule = mem::replace(&mut state.current_rule, CssRule::new());
+        state.current_rule_set.rules.push(current_rule);
+    }
+}
+
+struct CssString {}
+impl Css for CssString {
+    fn test(css : char) -> CssTestResult {
+        match css {
+            '"' |
+            '\'' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
+            _ =>    CssTestResult {context: CssContext::String, command: CssCommand::None},
+        }
+    }
+
+    fn end(state : &mut CssParser) {
+        let char = state.current_char;
+        state.push_char(char);
     }
 }
 
@@ -179,7 +192,6 @@ struct CssParser {
     current_rule_set : CssRuleSet,
     current_rule : CssRule
 }
-
 impl CssParser {
 
     fn new() -> CssParser {
@@ -304,34 +316,5 @@ enum CssContext {
     Key,
     Value,
     String,
-
-    Append,
-    End,
-    EndKeepChar,
     None,
 }
-
-#[derive(Debug)]
-struct CssRule {
-    key: String,
-    value: String
-}
-
-impl CssRule {
-    fn new() -> CssRule {
-        return CssRule {key: "".to_string(), value: "".to_string()}
-    }
-}
-
-#[derive(Debug)]
-struct CssRuleSet {
-    selectors : Vec<String>,
-    rules : Vec<CssRule>
-}
-
-impl CssRuleSet {
-    fn new() -> CssRuleSet {
-        return CssRuleSet {selectors: Vec::new(), rules: Vec::new()}
-    }
-}
-
