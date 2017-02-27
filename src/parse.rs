@@ -25,10 +25,25 @@ fn main() {
 }
 
 trait Css {
-    fn test(char : char) -> CssTestResult;
-    fn begin(state : &mut CssParser) {}
-    fn append(state : &mut CssParser) {}
-    fn end(state : &mut CssParser) {}
+    fn test(&self, state : &mut CssParser, char : char) -> CssTestResult;
+    fn begin(&self, state : &mut CssParser) {}
+    fn append(&self, state : &mut CssParser) {}
+    fn end(&self, state : &mut CssParser) {}
+}
+
+#[derive(Debug)]
+struct CssNone { }
+impl CssNone {
+    fn new() -> CssNone {
+        return CssNone {}
+    }
+}
+impl Css for CssNone {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+        match css {
+            _ => CssTestResult {context: CssContext::None, command: CssCommand::None},
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -43,14 +58,10 @@ impl CssRoot {
     }
 }
 impl Css for CssRoot {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             _ => CssTestResult {context: CssContext::Selector, command: CssCommand::Begin},
         }
-    }
-
-    fn begin(state : &mut CssParser) {
-        //        return CssRoot::new();
     }
 }
 
@@ -62,7 +73,7 @@ impl CssSelector {
     }
 }
 impl Css for CssSelector {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             '{' => CssTestResult {context: CssContext::None,     command: CssCommand::End},
             ',' => CssTestResult {context: CssContext::Selector, command: CssCommand::Append},
@@ -71,19 +82,19 @@ impl Css for CssSelector {
         }
     }
 
-    fn begin(state : &mut CssParser) {
+    fn begin(&self, state : &mut CssParser) {
         let char = state.current_char;
         state.push_char(char);
     }
 
-    fn end(state : &mut CssParser) {
+    fn end(&self, state : &mut CssParser) {
         let chars = state.flush_char_buffer();
         state.ruleset.selectors.push(chars);
 
         state.push_context(CssContext::RuleSet);
     }
 
-    fn append(state : &mut CssParser) {
+    fn append(&self, state : &mut CssParser) {
         let chars = state.flush_char_buffer();
         state.ruleset.selectors.push(chars);
     }
@@ -100,7 +111,7 @@ impl CssRuleSet {
     }
 }
 impl Css for CssRuleSet {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             ' '  |
             '\n' |
@@ -111,10 +122,9 @@ impl Css for CssRuleSet {
         }
     }
 
-    fn end(state : &mut CssParser) {
+    fn end(&self, state : &mut CssParser) {
         let current_rule_set = mem::replace(&mut state.ruleset, CssRuleSet::new());
         state.root.rule_sets.push(current_rule_set);
-
     }
 }
 
@@ -137,19 +147,19 @@ impl CssKey {
     }
 }
 impl Css for  CssKey {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             ':' => CssTestResult {context: CssContext::None, command: CssCommand::End},
             _ => CssTestResult   {context: CssContext::Key,  command: CssCommand::None},
         }
     }
 
-    fn begin(state : &mut CssParser) {
+    fn begin(&self, state : &mut CssParser) {
         let char = state.current_char;
         state.push_char(char);
     }
 
-    fn end(state : &mut CssParser) {
+    fn end(&self, state : &mut CssParser) {
         state.rule.key = state.flush_char_buffer();
         state.push_context(CssContext::Value);
     }
@@ -163,7 +173,7 @@ impl CssValue {
     }
 }
 impl Css for CssValue {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             '"' => CssTestResult {context: CssContext::String, command: CssCommand::Begin},
             '\''=> CssTestResult {context: CssContext::String, command: CssCommand::Begin},
@@ -173,12 +183,12 @@ impl Css for CssValue {
         }
     }
 
-    fn begin(state : &mut CssParser) {
+    fn begin(&self, state : &mut CssParser) {
         let char = state.current_char;
         state.push_char(char);
     }
 
-    fn end(state : &mut CssParser) {
+    fn end(&self, state : &mut CssParser) {
         state.rule.value = state.flush_char_buffer();
 
         let current_rule = mem::replace(&mut state.rule, CssRule::new());
@@ -194,7 +204,7 @@ impl CssString {
     }
 }
 impl Css for CssString {
-    fn test(css : char) -> CssTestResult {
+    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
         match css {
             '"' |
             '\'' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
@@ -202,7 +212,7 @@ impl Css for CssString {
         }
     }
 
-    fn end(state : &mut CssParser) {
+    fn end(&self, state : &mut CssParser) {
         let char = state.current_char;
         state.push_char(char);
     }
@@ -220,6 +230,7 @@ struct CssParser {
     key: CssKey,
     value: CssValue,
     string: CssString,
+    none: CssNone
 }
 impl CssParser {
 
@@ -236,6 +247,7 @@ impl CssParser {
             key: CssKey::new(),
             value: CssValue::new(),
             string: CssString::new(),
+            none: CssNone::new()
         };
         parser.push_context(CssContext::Root);
 
@@ -260,6 +272,18 @@ impl CssParser {
         self.char_buffer.push(char);
     }
 
+    fn get_css_for_context(&self, context : CssContext) -> &Css {
+        return match context {
+            CssContext::Root => &self.root,
+            CssContext::Selector => &self.selector,
+            CssContext::RuleSet => &self.ruleset,
+            CssContext::Key => &self.key,
+            CssContext::Value => &self.value,
+            CssContext::String => &self.string,
+            CssContext::None => &self.none
+        }
+    }
+
     fn parse_char(&mut self) {
         let char = self.current_char;
         let current_context = match self.stack.last() {
@@ -267,54 +291,31 @@ impl CssParser {
             None => CssContext::None
         };
 
-        let test_result = match current_context {
-            CssContext::Root => CssRoot::test(char),
-            CssContext::Selector => CssSelector::test(char),
-            CssContext::RuleSet => CssRuleSet::test(char),
-            CssContext::Key => CssKey::test(char),
-            CssContext::Value => CssValue::test(char),
-            CssContext::String => CssString::test(char),
-            x => panic!("{:?}", x)
-        };
+        let css = self.get_css_for_context(current_context);
+        let test_result = css.test(self, char);
         let command = test_result.command;
         let next_context = test_result.context;
 
         match command {
-            CssCommand::End | CssCommand::EndKeepChar => {
+            CssCommand::End => {
                 self.pop_context();
-
-                match current_context {
-                    CssContext::Selector => { CssSelector::end(self) },
-                    CssContext::Key => { CssKey::end(self) }
-                    CssContext::Value => { CssValue::end(self) },
-                    CssContext::RuleSet => { CssRuleSet::end(self) },
-                    CssContext::String => { CssString::end(self) },
-                    _ => ()
-                };
-
-                match command {
-                    CssCommand::EndKeepChar => { self.parse_char(); },
-                    _ => ()
-                };
-
+                css.end(self);
+            },
+            CssCommand::EndKeepChar => {
+                self.pop_context();
+                css.end(self);
+                self.parse_char();
             },
             CssCommand::Append => {
-                match current_context {
-                    CssContext::Selector => { CssSelector::append(self) },
-                    _ => ()
-                }
+                css.append(self);
             },
             CssCommand::Begin => {
                 self.push_context(next_context);
-
-                match next_context {
-                    CssContext::Selector => { CssSelector::begin(self) },
-                    CssContext::Key => { CssSelector::begin(self) },
-                    CssContext::String => { CssSelector::begin(self) },
-                    _ => ()
-                }
+                css.begin(self);
             },
-            CssCommand::None => { self.push_char(char) }
+            CssCommand::None => {
+                self.push_char(char)
+            }
         }
     }
 
