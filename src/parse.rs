@@ -25,10 +25,10 @@ fn main() {
 }
 
 trait Css {
-    fn test(&self, state : &mut CssParser, char : char) -> CssTestResult;
-    fn begin(&self, state : &mut CssParser) {}
-    fn append(&self, state : &mut CssParser) {}
-    fn end(&self, state : &mut CssParser) {}
+    fn test(&self, char : char) -> CssTestResult;
+    fn begin(&self) {}
+    fn append(&self) {}
+    fn end(&self) {}
 }
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl CssNone {
     }
 }
 impl Css for CssNone {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             _ => CssTestResult {context: CssContext::None, command: CssCommand::None},
         }
@@ -58,7 +58,7 @@ impl CssRoot {
     }
 }
 impl Css for CssRoot {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             _ => CssTestResult {context: CssContext::Selector, command: CssCommand::Begin},
         }
@@ -73,7 +73,7 @@ impl CssSelector {
     }
 }
 impl Css for CssSelector {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             '{' => CssTestResult {context: CssContext::None,     command: CssCommand::End},
             ',' => CssTestResult {context: CssContext::Selector, command: CssCommand::Append},
@@ -111,7 +111,7 @@ impl CssRuleSet {
     }
 }
 impl Css for CssRuleSet {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             ' '  |
             '\n' |
@@ -147,7 +147,7 @@ impl CssKey {
     }
 }
 impl Css for  CssKey {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             ':' => CssTestResult {context: CssContext::None, command: CssCommand::End},
             _ => CssTestResult   {context: CssContext::Key,  command: CssCommand::None},
@@ -173,7 +173,7 @@ impl CssValue {
     }
 }
 impl Css for CssValue {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             '"' => CssTestResult {context: CssContext::String, command: CssCommand::Begin},
             '\''=> CssTestResult {context: CssContext::String, command: CssCommand::Begin},
@@ -204,17 +204,12 @@ impl CssString {
     }
 }
 impl Css for CssString {
-    fn test(&self, state : &mut CssParser, css : char) -> CssTestResult {
+    fn test(&self, css : char) -> CssTestResult {
         match css {
             '"' |
-            '\'' => CssTestResult {context: CssContext::None,   command: CssCommand::End},
+            '\'' => CssTestResult {context: CssContext::None,   command: CssCommand::EndIncludeChar},
             _ =>    CssTestResult {context: CssContext::String, command: CssCommand::None},
         }
-    }
-
-    fn end(&self, state : &mut CssParser) {
-        let char = state.current_char;
-        state.push_char(char);
     }
 }
 
@@ -292,26 +287,31 @@ impl CssParser {
         };
 
         let css = self.get_css_for_context(current_context);
-        let test_result = css.test(self, char);
+        let test_result = css.test(char);
         let command = test_result.command;
         let next_context = test_result.context;
 
         match command {
             CssCommand::End => {
                 self.pop_context();
-                css.end(self);
+                css.end();
+            },
+            CssCommand::EndIncludeChar => {
+                self.pop_context();
+                css.end();
+                self.push_char(char);
             },
             CssCommand::EndKeepChar => {
                 self.pop_context();
-                css.end(self);
+                css.end();
                 self.parse_char();
             },
             CssCommand::Append => {
-                css.append(self);
+                css.append();
             },
             CssCommand::Begin => {
                 self.push_context(next_context);
-                css.begin(self);
+                css.begin();
             },
             CssCommand::None => {
                 self.push_char(char)
@@ -338,6 +338,7 @@ enum CssCommand {
     Begin,
     Append,
     End,
+    EndIncludeChar,
     EndKeepChar,
     None,
 }
